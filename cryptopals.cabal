@@ -39,3 +39,6 @@ test-suite test
                       base >= 3 && < 5
                     , QuickCheck == 2.8.*
                     , ambiata-disorder-core
+                    , ambiata-p
+                    , cryptopals
+                    , quickcheck-instances

@@ -15,6 +15,19 @@ import           P
 import qualified Prelude
 
 
+
+
+-- | As long as the two bytestrings are the same length, return their
+-- xor combination.
+fixedXor :: ByteString -> ByteString -> Maybe ByteString
+fixedXor a b
+  | B.length a /= B.length b = Nothing
+  | otherwise = Just . B.pack $ B.zipWith xor a b
+
+
+-- -----------------------------------------------------------------------------
+-- Hex
+
 fromHex :: [Char] -> Maybe ByteString
 fromHex = liftM B.pack . unHexPairs
   where
@@ -34,12 +47,34 @@ unHexChar (toLower -> c)
   | c >= 'a' && c <= 'f' = Just . fromIntegral $ ord c - ord 'a' + 10
   | otherwise = Nothing
 
+hexChar :: Word8 -> Maybe Char
+hexChar b
+  | b >= 0  && b <= 9  = Just (chr (fromIntegral b + ord '0'))
+  | b >= 10 && b <= 15 = Just (chr (fromIntegral b + ord 'a' - 10))
+  | otherwise = Nothing
+
+hexPair :: Word8 -> (Char, Char)
+hexPair a = (b, c)
+  where
+    b = fromMaybe uh $ hexChar (a `shiftR` 4)
+    c = fromMaybe uh $ hexChar (a .&. 15)
+    uh = Prelude.error "hexPair: bad bitmask, uh oh"
+
 unHexPair :: Char -> Char -> Maybe Word8
 unHexPair l' r' = do
   l <- unHexChar l'
   r <- unHexChar r'
   pure $ (l `shiftL` 4) .|. r
 
+toHex :: ByteString -> [Char]
+toHex = hexChars . B.unpack
+  where
+    hexChars ls = case ls of
+      (b:bs) -> let (c, d) = hexPair b in c : d: hexChars bs
+      [] -> []
+
+-- -----------------------------------------------------------------------------
+-- Base64
 
 toBase64 :: ByteString -> [Char]
 toBase64 = unBase64Triples . B.unpack
@@ -53,8 +88,6 @@ toBase64 = unBase64Triples . B.unpack
             (x:[])     -> (unBase64Triple x 0 0, [])
             _          -> (unBase64Triple 0 0 0, [])
       in c1 : c2 : c3 : c4 : unBase64Triples zs
-
-
 
 unBase64Triple :: Word8 -> Word8 -> Word8 -> (Char, Char, Char, Char)
 unBase64Triple w1' w2' w3' = fromMaybe uh $ do

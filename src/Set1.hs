@@ -8,6 +8,7 @@ import           Data.Bits
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.Char (chr, ord, toLower)
+import           Data.Foldable (maximumBy)
 import           Data.Word (Word8)
 
 import           P
@@ -16,6 +17,20 @@ import qualified Prelude
 
 
 
+-- | Brute-force the key to a string that's been fixedXor'd.
+-- Uses ASCII character frequency to figure out the best option.
+unFixedXor :: ByteString -> ByteString
+unFixedXor bs = snd . maximumBy (compare `on` fst) . fmap (prospect . ($bs)) $ candidates
+  where
+    candidates = fmap (B.map . xor) [0..255 :: Word8]
+    --
+    prospect :: ByteString -> (Integer, ByteString)
+    prospect bs = (foldl' countAscii 0 (B.unpack bs), bs)
+    --
+    countAscii n b
+      -- b `elem` ['A'..'Z', 'a'..'z']
+      | (b >= 65 && b <= 90) || (b >= 97 && b <= 122) = n + 1
+      | otherwise = n
 
 -- | As long as the two bytestrings are the same length, return their
 -- xor combination.

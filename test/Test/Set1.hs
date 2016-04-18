@@ -36,6 +36,13 @@ prop_fixedXor_unit = once $ res === pure expect
       bs3 <- fixedXor bs1 bs2
       pure $ toHex bs3
 
+prop_unFixedXor_unit = once $ res === pure expect
+  where
+    expect = "cOOKING\NULmc\aS\NULLIKE\NULA\NULPOUND\NULOF\NULBACON"
+    res = do
+      let hex = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
+      bs <- fromHex hex
+      pure $ unFixedXor bs
 
 
 return []

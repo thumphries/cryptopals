@@ -9,6 +9,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.Char (chr, ord, toLower)
 import           Data.Foldable (maximumBy)
+import           Data.List ((!!), iterate)
 import           Data.Word (Word8)
 
 import           P
@@ -16,11 +17,24 @@ import           P
 import qualified Prelude
 
 
+repeatingKeyXor :: ByteString -> ByteString -> ByteString
+repeatingKeyXor key plain = B.pack (B.zipWith xor keyrep plain)
+  where
+    infkey = iterate (B.append key) B.empty !! B.length plain
+    keyrep = B.take (B.length plain) infkey
+
+
+-- | Given a list of ciphertext, pick the one most likely to have been
+-- singleByteXor'd, and spit out its deciphered value
+detectSingleByteXor :: [ByteString] -> ByteString
+detectSingleByteXor = snd . maximumBy (compare `on` fst) . brute
+  where
+    brute = fmap unSingleByteXor
 
 -- | Brute-force the key to a string that's been fixedXor'd.
 -- Uses ASCII character frequency to figure out the best option.
-unFixedXor :: ByteString -> ByteString
-unFixedXor bs = snd . maximumBy (compare `on` fst) . fmap (prospect . ($bs)) $ candidates
+unSingleByteXor :: ByteString -> (Integer, ByteString)
+unSingleByteXor bs = maximumBy (compare `on` fst) . fmap (prospect . ($bs)) $ candidates
   where
     candidates = fmap (B.map . xor) [0..255 :: Word8]
     --
@@ -30,6 +44,7 @@ unFixedXor bs = snd . maximumBy (compare `on` fst) . fmap (prospect . ($bs)) $ c
     countAscii n b
       -- b `elem` ['A'..'Z', 'a'..'z']
       | (b >= 65 && b <= 90) || (b >= 97 && b <= 122) = n + 1
+      | b == 32 = n + 1
       | otherwise = n
 
 -- | As long as the two bytestrings are the same length, return their

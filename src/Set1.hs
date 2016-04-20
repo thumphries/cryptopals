@@ -14,8 +14,21 @@ import           Data.Word (Word8)
 
 import           P
 
+import           System.IO (IO)
+
 import qualified Prelude
 
+
+test :: IO ByteString
+test = B.readFile "data/6.txt"
+
+-- For binary strings a and b the Hamming distance is equal to the
+-- number of ones (population count) in a XOR b.
+-- FIX length mismatch case is not handled
+hammingDistance :: ByteString -> ByteString -> Int
+hammingDistance a = sum . fmap popCount . B.zipWith xor a
+
+-- -----------------------------------------------------------------------------
 
 repeatingKeyXor :: ByteString -> ByteString -> ByteString
 repeatingKeyXor key plain = B.pack (B.zipWith xor keyrep plain)
@@ -144,3 +157,43 @@ unBase64Sextet w
 
 sextet :: Word8 -> Word8
 sextet b = b .&. complement 192
+
+unBase64Chars :: Char -> Char -> Char -> Char -> Maybe (Word8, Word8, Word8)
+unBase64Chars w x y z = do
+  s1 <- unBase64Char w
+  traceM (show s1)
+  s2 <- unBase64Char x
+  traceM (show s2)
+  s3 <- unBase64Char y
+  traceM (show s3)
+  s4 <- unBase64Char z
+  traceM (show s4)
+  pure (w1 s1 s2, w2 s2 s3, w3 s3 s4)
+  where
+    w1 s1 s2 = (s1 `shiftL` 2) .|. (s2 `shiftR` 4)
+    w2 s2 s3 = (s2 `shiftL` 4) .|. (s3 `shiftR` 4)
+    w3 s3 s4 = (s3 `shiftL` 6) .|. s4
+
+unBase64Char :: Char -> Maybe Word8
+unBase64Char c
+  | c >= 'A' && c <= 'Z' = Just $ fromIntegral (ord c - ord 'A')
+  | c >= 'a' && c <= 'z' = Just $ fromIntegral (ord c - ord 'a' + 26)
+  | c >= '0' && c <= '9' = Just $ fromIntegral (ord c - ord '0' + 52)
+  | c == '+' = Just 62
+  | c == '/' = Just 63
+  | otherwise = Nothing
+
+-- FIX need to implement == padding
+fromBase64 :: [Char] -> Maybe ByteString
+fromBase64 = liftM B.pack . parse
+  where
+    j = '\0'
+    recur :: [Char] -> (Word8, Word8, Word8) -> Maybe [Word8]
+    recur xs (a, b, c) = liftM ([a,b,c] <>) (parse xs)
+    parse :: [Char] -> Maybe [Word8]
+    parse ls = case ls of
+      (w:x:y:z:xs) -> unBase64Chars w x y z >>= recur xs
+      (x:y:z:[])   -> unBase64Chars x y z j >>= recur []
+      (x:y:[])     -> unBase64Chars x y j j >>= recur []
+      (x:[])       -> unBase64Chars x j j j >>= recur []
+      []           -> pure []

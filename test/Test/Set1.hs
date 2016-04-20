@@ -66,5 +66,9 @@ prop_repeatingKeyXor_unit = once $ res === expect
 
 prop_repeatingKey_trip key bs = repeatingKeyXor key (repeatingKeyXor key bs) === bs
 
+prop_hamming_unit = once $ hammingDistance "this is a test" "wokka wokka!!!" === 37
+
+prop_base64_trip bs = tripping toBase64 fromBase64
+
 return []
 tests = $quickCheckAll

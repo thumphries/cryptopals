@@ -51,11 +51,12 @@ prop_unFixedXor_unit = once $ res === pure expect
     res = do
       let hex = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
       bs <- fromHex hex
-      pure . snd $ unSingleByteXor bs
+      let (_key, val, _score) = unSingleByteXor bs
+      pure val
 
 prop_detectSingleByteXor_unit = once . testIO $ do
   res <- detectSingleByteXor . mapMaybe fromHex . Prelude.lines <$> readFile "data/4.txt"
-  pure $ res === "Now that the party is jumping\n"
+  pure $ snd res === "Now that the party is jumping\n"
 
 prop_repeatingKeyXor_unit = once $ res === expect
   where
@@ -76,8 +77,11 @@ prop_unBase64_sextet c = case unBase64Char c of
 
 prop_base64_trip = tripping toBase64 fromBase64
 
-prop_unRepeatingKey_unit = property True
+prop_unRepeatingKey_unit = once . testIO $ do
+  (key, _) <- liftM unRepeatingKeyXor ciphertext
+  pure $ key === expect
   where
+    expect = "Terminator X: Bring the noise"
     ciphertext = B.concat . mapMaybe (fromBase64 . B8.unpack) . B8.lines <$> file
     file = B.readFile "data/6.txt"
 

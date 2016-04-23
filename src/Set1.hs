@@ -10,8 +10,8 @@ import qualified Data.ByteString as B
 import           Data.ByteString.Builder
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as B (toStrict)
-import           Data.Char (chr, ord, toLower)
-import           Data.Foldable (maximumBy)
+import           Data.Char
+import           Data.Foldable (maximumBy, minimumBy)
 import           Data.List ((!!), iterate, take)
 import           Data.Word (Word8)
 
@@ -28,6 +28,45 @@ hammingDistance a = sum . fmap popCount . B.zipWith xor a
 
 -- -----------------------------------------------------------------------------
 
+unRepeatingKeyXor :: ByteString -> (ByteString, ByteString)
+unRepeatingKeyXor = Prelude.head . unRepeatingKeyXor'
+
+unRepeatingKeyXor' :: ByteString -> [(ByteString, ByteString)]
+unRepeatingKeyXor' bs = fmap (guess bs) (take 5 keysizes)
+  where
+    keysizes = unRepeatingKeyXorGuessKeysize bs
+
+guess :: ByteString -> Int -> (ByteString, ByteString)
+guess bs keysize = (key, repeatingKeyXor key bs)
+  where
+    blocks = bsBlocks keysize bs
+    transposed = B8.transpose blocks
+    bruteforced = fmap unSingleByteXor transposed
+    key = B.pack $ fmap (\(k, _, _) -> k) bruteforced
+
+unRepeatingKeyXorGuessKeysize :: ByteString -> [Int]
+unRepeatingKeyXorGuessKeysize bs = fmap fst $ sortOn snd brute
+  where
+    brute = fmap (\a -> (a, guess a)) [2..40]
+    -- We need a representative sample of hamming distances, or we get
+    -- trapped in local optima. This just checks every chunk and takes the mean.
+    guess :: Int -> Double
+    guess k = mean $ fmap (hammingChunk k (a k)) (b k)
+    --
+    hammingChunk :: Int -> ByteString -> ByteString -> Double
+    hammingChunk k c d = fromIntegral (hammingDistance c d) / fromIntegral k
+    --
+    a keysize = B.take keysize bs
+    b keysize = bsBlocks keysize (B.drop keysize bs)
+
+mean :: (Fractional a, Foldable t) => t a -> a
+mean ls = (sum ls) / fromIntegral (length ls)
+
+bsBlocks :: Int -> ByteString -> [ByteString]
+bsBlocks n bs =
+  let (a, rest) = B.splitAt n bs
+  in if B.null rest then a : [] else a : bsBlocks n rest
+
 repeatingKeyXor :: ByteString -> ByteString -> ByteString
 repeatingKeyXor key plain = B.pack (B.zipWith xor keyrep plain)
   where
@@ -37,25 +76,50 @@ repeatingKeyXor key plain = B.pack (B.zipWith xor keyrep plain)
 
 -- | Given a list of ciphertext, pick the one most likely to have been
 -- singleByteXor'd, and spit out its deciphered value
-detectSingleByteXor :: [ByteString] -> ByteString
-detectSingleByteXor = snd . maximumBy (compare `on` fst) . brute
+detectSingleByteXor :: [ByteString] -> (Word8, ByteString)
+detectSingleByteXor = prjbs . maximumBy order . brute
   where
     brute = fmap unSingleByteXor
+    order = compare `on` (\(_, _, c) -> c)
+    prjbs (a, b, _) = (a, b)
 
 -- | Brute-force the key to a string that's been fixedXor'd.
 -- Uses ASCII character frequency to figure out the best option.
-unSingleByteXor :: ByteString -> (Integer, ByteString)
-unSingleByteXor bs = maximumBy (compare `on` fst) . fmap (prospect . ($bs)) $ candidates
+unSingleByteXor :: ByteString -> (Word8, ByteString, Double)
+unSingleByteXor bs = maximumBy ordering . fmap (prospect . ($bs)) $ candidates
   where
-    candidates = fmap (B.map . xor) [0..255 :: Word8]
+    candidates = fmap (\key -> (,) key . B.map (xor key)) [0..255 :: Word8]
+    ordering = compare `on` (\(_, _, c) -> c)
     --
-    prospect :: ByteString -> (Integer, ByteString)
-    prospect bs = (foldl' countAscii 0 (B.unpack bs), bs)
-    -- This is a super dumb heuristic: isAlpha <|> isSpace
-    countAscii n b
-      | (b >= 65 && b <= 90) || (b >= 97 && b <= 122) = n + 1
-      | b == 32 = n + 1
-      | otherwise = n
+    prospect :: (Word8, ByteString) -> (Word8, ByteString, Double)
+    prospect (key, bs) = (key, bs, badHistogram bs)
+
+badHistogram :: ByteString -> Double
+badHistogram = foldl' countAscii 0 . B.unpack
+
+-- This is a super dumb heuristic: isAlpha <|> isSpace
+countAscii :: Double -> Word8 -> Double
+countAscii n b
+  | (b >= 65 && b <= 90) || (b >= 97 && b <= 122) = n + 1
+  | b == 32 = n + 1
+  -- subtract any inhuman characters
+  | b <= 31 || b >= 127 = n - 2
+  | otherwise = n
+
+{- Stole mietek's histogram to see if my heuristic was broken
+mietekHistogram :: ByteString -> Double
+mietekHistogram = scorePhrase
+
+scoreWord :: ByteString -> Double
+scoreWord s = realToFrac (B8.length (B8.filter isLetter s)) / realToFrac (B8.length s)
+
+scorePhrase :: ByteString -> Double
+scorePhrase s = average (fmap scoreWord (B8.words s))
+
+average :: Fractional a => [a] -> a
+average xs = sum xs / realToFrac (length xs)
+-}
+
 
 -- | As long as the two bytestrings are the same length, return their
 -- xor combination.

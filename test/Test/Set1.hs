@@ -4,7 +4,8 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Test.Set1 where
 
-import           Data.ByteString as B hiding (readFile)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
 
 import           Disorder.Core
 import           Disorder.Core.IO
@@ -15,7 +16,7 @@ import qualified Prelude
 
 import           Set1
 
-import           System.IO (IO, readFile)
+import           System.IO (readFile)
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
@@ -29,7 +30,7 @@ prop_fromHex_toBase64_unit = once $
 
 prop_unBase64Triple_no_fail x y z = unBase64Triple x y z /= ('*', '*', '*', '*')
 
-prop_hexPair_total w = tripping hexPair (uncurry unHexPair)
+prop_hexPair_total = tripping hexPair (uncurry unHexPair)
 
 prop_toHex_fromHex = tripping toHex fromHex
 
@@ -46,7 +47,7 @@ prop_fixedXor_unit = once $ res === pure expect
 
 prop_unFixedXor_unit = once $ res === pure expect
   where
-    expect = "cOOKING\NULmc\aS\NULLIKE\NULA\NULPOUND\NULOF\NULBACON"
+    expect = "Cooking MC's like a pound of bacon"
     res = do
       let hex = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736"
       bs <- fromHex hex
@@ -64,11 +65,22 @@ prop_repeatingKeyXor_unit = once $ res === expect
     expect = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272\
              \a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f"
 
-prop_repeatingKey_trip key bs = repeatingKeyXor key (repeatingKeyXor key bs) === bs
+prop_repeatingKey_trip key bs = not (B.null key) ==>
+  repeatingKeyXor key (repeatingKeyXor key bs) === bs
 
 prop_hamming_unit = once $ hammingDistance "this is a test" "wokka wokka!!!" === 37
 
-prop_base64_trip bs = tripping toBase64 fromBase64
+prop_unBase64_sextet c = case unBase64Char c of
+  Nothing -> property True
+  Just b -> sextet b === b
+
+prop_base64_trip = tripping toBase64 fromBase64
+
+prop_unRepeatingKey_unit = property True
+  where
+    ciphertext = B.concat . mapMaybe (fromBase64 . B8.unpack) . B8.lines <$> file
+    file = B.readFile "data/6.txt"
+
 
 return []
 tests = $quickCheckAll

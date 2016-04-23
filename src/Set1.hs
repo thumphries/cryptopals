@@ -7,20 +7,18 @@ module Set1 where
 import           Data.Bits
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import           Data.ByteString.Builder
+import qualified Data.ByteString.Char8 as B8
+import qualified Data.ByteString.Lazy as B (toStrict)
 import           Data.Char (chr, ord, toLower)
 import           Data.Foldable (maximumBy)
-import           Data.List ((!!), iterate)
+import           Data.List ((!!), iterate, take)
 import           Data.Word (Word8)
 
 import           P
 
-import           System.IO (IO)
-
 import qualified Prelude
 
-
-test :: IO ByteString
-test = B.readFile "data/6.txt"
 
 -- For binary strings a and b the Hamming distance is equal to the
 -- number of ones (population count) in a XOR b.
@@ -53,9 +51,8 @@ unSingleByteXor bs = maximumBy (compare `on` fst) . fmap (prospect . ($bs)) $ ca
     --
     prospect :: ByteString -> (Integer, ByteString)
     prospect bs = (foldl' countAscii 0 (B.unpack bs), bs)
-    --
+    -- This is a super dumb heuristic: isAlpha <|> isSpace
     countAscii n b
-      -- b `elem` ['A'..'Z', 'a'..'z']
       | (b >= 65 && b <= 90) || (b >= 97 && b <= 122) = n + 1
       | b == 32 = n + 1
       | otherwise = n
@@ -125,12 +122,16 @@ toBase64 = unBase64Triples . B.unpack
     unBase64Triples :: [Word8] -> [Char]
     unBase64Triples [] = []
     unBase64Triples ls =
-      let ((c1, c2, c3, c4), zs) = case ls of
-            (x:y:z:zs) -> (unBase64Triple x y z, zs)
-            (x:y:[])   -> (unBase64Triple x y 0, [])
-            (x:[])     -> (unBase64Triple x 0 0, [])
-            _          -> (unBase64Triple 0 0 0, [])
-      in c1 : c2 : c3 : c4 : unBase64Triples zs
+      case ls of
+        (x:y:z:zs) ->
+          let (a, b, c, d) = unBase64Triple x y z
+          in a : b : c : d : unBase64Triples zs
+        (x:y:[]) ->
+          let (a, b, c, _) = unBase64Triple x y 0
+          in a : b : c : '=' : []
+        (x:[]) ->
+          let (a, b, _, _) = unBase64Triple x 0 0
+          in a : b : '=' : '=' : []
 
 unBase64Triple :: Word8 -> Word8 -> Word8 -> (Char, Char, Char, Char)
 unBase64Triple w1' w2' w3' = fromMaybe uh $ do
@@ -158,20 +159,17 @@ unBase64Sextet w
 sextet :: Word8 -> Word8
 sextet b = b .&. complement 192
 
-unBase64Chars :: Char -> Char -> Char -> Char -> Maybe (Word8, Word8, Word8)
-unBase64Chars w x y z = do
+
+unBase64Quad :: Char -> Char -> Char -> Char -> Maybe [Word8]
+unBase64Quad w x y z = do
   s1 <- unBase64Char w
-  traceM (show s1)
   s2 <- unBase64Char x
-  traceM (show s2)
   s3 <- unBase64Char y
-  traceM (show s3)
   s4 <- unBase64Char z
-  traceM (show s4)
-  pure (w1 s1 s2, w2 s2 s3, w3 s3 s4)
+  pure [w1 s1 s2, w2 s2 s3, w3 s3 s4]
   where
     w1 s1 s2 = (s1 `shiftL` 2) .|. (s2 `shiftR` 4)
-    w2 s2 s3 = (s2 `shiftL` 4) .|. (s3 `shiftR` 4)
+    w2 s2 s3 = (s2 `shiftL` 4) .|. (s3 `shiftR` 2)
     w3 s3 s4 = (s3 `shiftL` 6) .|. s4
 
 unBase64Char :: Char -> Maybe Word8
@@ -181,19 +179,29 @@ unBase64Char c
   | c >= '0' && c <= '9' = Just $ fromIntegral (ord c - ord '0' + 52)
   | c == '+' = Just 62
   | c == '/' = Just 63
+  | c == '=' = Just 0
   | otherwise = Nothing
 
--- FIX need to implement == padding
+
 fromBase64 :: [Char] -> Maybe ByteString
-fromBase64 = liftM B.pack . parse
+fromBase64 = liftM (B.toStrict . toLazyByteString) . parse
   where
-    j = '\0'
-    recur :: [Char] -> (Word8, Word8, Word8) -> Maybe [Word8]
-    recur xs (a, b, c) = liftM ([a,b,c] <>) (parse xs)
-    parse :: [Char] -> Maybe [Word8]
+    j = '='
+    recur xs b = liftM (b <>) (parse xs)
+    parse :: [Char] -> Maybe Builder
     parse ls = case ls of
       (w:x:y:z:xs) -> unBase64Chars w x y z >>= recur xs
       (x:y:z:[])   -> unBase64Chars x y z j >>= recur []
       (x:y:[])     -> unBase64Chars x y j j >>= recur []
-      (x:[])       -> unBase64Chars x j j j >>= recur []
-      []           -> pure []
+      _            -> pure mempty
+
+unBase64Chars :: Char -> Char -> Char -> Char -> Maybe Builder
+unBase64Chars w x y z = do
+  a <- unBase64Quad w x y z
+  pure $ bsBuild (n w x y z) a
+  where
+    bsBuild n = byteString . B.pack . take n
+    --
+    n _ _ '=' '=' = 1
+    n _ _ _ '=' = 2
+    n _ _ _ _ = 3

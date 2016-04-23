@@ -106,21 +106,6 @@ countAscii n b
   | b <= 31 || b >= 127 = n - 2
   | otherwise = n
 
-{- Stole mietek's histogram to see if my heuristic was broken
-mietekHistogram :: ByteString -> Double
-mietekHistogram = scorePhrase
-
-scoreWord :: ByteString -> Double
-scoreWord s = realToFrac (B8.length (B8.filter isLetter s)) / realToFrac (B8.length s)
-
-scorePhrase :: ByteString -> Double
-scorePhrase s = average (fmap scoreWord (B8.words s))
-
-average :: Fractional a => [a] -> a
-average xs = sum xs / realToFrac (length xs)
--}
-
-
 -- | As long as the two bytestrings are the same length, return their
 -- xor combination.
 fixedXor :: ByteString -> ByteString -> Maybe ByteString

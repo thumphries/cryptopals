@@ -4,6 +4,10 @@
 module Set1 where
 
 
+import           Crypto.Cipher.AES
+import           Crypto.Cipher.Types
+import           Crypto.Error (CryptoFailable (..), maybeCryptoError)
+
 import           Data.Bits
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -19,6 +23,16 @@ import           P
 
 import qualified Prelude
 
+
+-- -----------------------------------------------------------------------------
+
+ecbDecrypt_AES128 :: ByteString -> ByteString -> Maybe ByteString
+ecbDecrypt_AES128 key ctext = maybeCryptoError $ do
+  ctx <- cipherInit key :: CryptoFailable AES128
+  pure $ ecbDecrypt ctx ctext
+
+
+-- -----------------------------------------------------------------------------
 
 -- For binary strings a and b the Hamming distance is equal to the
 -- number of ones (population count) in a XOR b.

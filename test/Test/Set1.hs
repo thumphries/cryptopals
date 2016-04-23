@@ -82,9 +82,16 @@ prop_unRepeatingKey_unit = once . testIO $ do
   pure $ key === expect
   where
     expect = "Terminator X: Bring the noise"
-    ciphertext = B.concat . mapMaybe (fromBase64 . B8.unpack) . B8.lines <$> file
-    file = B.readFile "data/6.txt"
+    ciphertext = base64File "data/6.txt"
 
+prop_ecbDecrypt_AES128 = once . testIO $ do
+  input <- base64File "data/7.txt"
+  let key = "YELLOW SUBMARINE"
+      expect = "I'm back and I'm ringin' the bell"
+  pure $ liftM (B.take 33) (ecbDecrypt_AES128 key input) === pure expect
+
+
+base64File = liftM (B.concat . mapMaybe (fromBase64 . B8.unpack) . B8.lines) . B.readFile
 
 return []
 tests = $quickCheckAll

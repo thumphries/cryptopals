@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Set1
+                     , Set2
   build-depends:
                        base           >=4.8        && <4.9
                      , bytestring     >= 0.10.4

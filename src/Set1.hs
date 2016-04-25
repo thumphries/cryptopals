@@ -65,7 +65,7 @@ unRepeatingKeyXorGuessKeysize bs = fmap fst $ sortOn snd brute
     -- We need a representative sample of hamming distances, or we get
     -- trapped in local optima. This just checks every chunk and takes the mean.
     guess :: Int -> Double
-    guess k = mean $ fmap (hammingChunk k (a k)) (b k)
+    guess k = meanFrac $ fmap (hammingChunk k (a k)) (b k)
     --
     hammingChunk :: Int -> ByteString -> ByteString -> Double
     hammingChunk k c d = fromIntegral (hammingDistance c d) / fromIntegral k
@@ -73,8 +73,11 @@ unRepeatingKeyXorGuessKeysize bs = fmap fst $ sortOn snd brute
     a keysize = B.take keysize bs
     b keysize = bsBlocks keysize (B.drop keysize bs)
 
-mean :: (Fractional a, Foldable t) => t a -> a
-mean ls = (sum ls) / fromIntegral (length ls)
+meanFrac :: (Fractional a, Foldable t) => t a -> a
+meanFrac ls = (sum ls) / fromIntegral (length ls)
+
+meanInt :: (Integral a, Fractional b, Foldable t) => t a -> b
+meanInt ls = fromIntegral (sum ls) / fromIntegral (length ls)
 
 bsBlocks :: Int -> ByteString -> [ByteString]
 bsBlocks n bs =
@@ -116,8 +119,6 @@ countAscii :: Double -> Word8 -> Double
 countAscii n b
   | (b >= 65 && b <= 90) || (b >= 97 && b <= 122) = n + 1
   | b == 32 = n + 1
-  -- subtract any inhuman characters
-  | b <= 31 || b >= 127 = n - 2
   | otherwise = n
 
 -- | As long as the two bytestrings are the same length, return their

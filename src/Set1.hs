@@ -26,6 +26,11 @@ import qualified Prelude
 
 -- -----------------------------------------------------------------------------
 
+ecbEncrypt_AES128 :: ByteString -> ByteString -> Maybe ByteString
+ecbEncrypt_AES128 key plain = maybeCryptoError $ do
+  ctx <- cipherInit key :: CryptoFailable AES128
+  pure $ ecbEncrypt ctx plain
+
 ecbDecrypt_AES128 :: ByteString -> ByteString -> Maybe ByteString
 ecbDecrypt_AES128 key ctext = maybeCryptoError $ do
   ctx <- cipherInit key :: CryptoFailable AES128
